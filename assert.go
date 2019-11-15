@@ -1,7 +1,10 @@
 package snippets
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -68,13 +71,26 @@ func (a *Assert) Equal(expected, actual interface{}, msg string) {
 	}
 }
 
-// NoError fails the test and prints the msg if err != nil.
-func (a *Assert) NoError(err error, msg string) {
+func (a *Assert) noError(err error, msg string, fatal bool) {
 	if err != nil {
 		_, file, line, _ := runtime.Caller(2)
 		fmt.Printf("\033[31m\t%s:%d: %s\n\n\t\t%s\033[39m\n\n", filepath.Base(file), line, msg, err)
-		a.t.Fail()
+		if fatal {
+			a.t.FailNow()
+		} else {
+			a.t.Fail()
+		}
 	}
+}
+
+// NoError fails the test and prints the msg if err != nil.
+func (a *Assert) NoError(err error, msg string) {
+	a.noError(err, msg, false)
+}
+
+// MustNoError fails & stops the test if err != nil.
+func (a *Assert) MustNoError(err error, msg string) {
+	a.noError(err, msg, true)
 }
 
 // NotNil fails the test and prints the msg if the obj is nil.
@@ -82,6 +98,29 @@ func (a *Assert) NotNil(obj interface{}, msg string) {
 	if IsNil(obj) {
 		errorSingle(a.t, msg, obj)
 	}
+}
+
+// FloatEqual compares two floats with an epsilon 1e-9.
+func (a *Assert) FloatEqual(expected, actual float64, msg string) {
+	if math.Abs(expected-actual) > 1e-9 {
+		errorCompare(a.t, msg, expected, actual)
+	}
+}
+
+// RequireEnv checks if a specific env variable is set, and
+// skip the test if it is not set.
+func (a *Assert) RequireEnv(key string) string {
+	s := os.Getenv(key)
+	if s == "" {
+		a.t.Skip("set " + key + " to run this test")
+	}
+	return s
+}
+
+// JSON logs v in json-encoded form.
+func (a *Assert) JSON(v interface{}) {
+	bs, _ := json.Marshal(v)
+	a.t.Log(string(bs))
 }
 
 // NewAssert provides an Assert instance.
